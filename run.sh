@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+export CUDA_VISIBLE_DEVICES=3
+
+python train.py \
+        --epoch 100 \
+        --lr 1e-3 \
+        --loss_weight 1.0 1.0 \
+        --audio_input both \
+        --text_input g2p_embed \
+        --stack_extractor \
+        --comment 'user comments for each experiment'

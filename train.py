@@ -129,16 +129,9 @@ def prepare_loader(args):
 
 
 def main():
+    wandb.init(entity="jethrowang0531", project="PhonMatchNet", name='PhonMatchNet')
+    
     args = parse_args()
-
-    wandb.init(entity="jethrowang0531", project="PhonMatchNet", name='PhonMatchNet', config={
-        "epoch": args.epoch,
-        "lr": args.lr,
-        "batch_size": args.batch_size,
-        "loss_weight": args.loss_weight,
-        "text_input": args.text_input,
-        "audio_input": args.audio_input,
-    })
 
     logging_dir = Path(args.output_dir, args.logging_dir)
 

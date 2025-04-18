@@ -115,18 +115,18 @@ def prepare_loader(args):
     val_hard_dataloader = KWSDataLoader(val_hard_dataset, args.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
     val_google_dataloader = KWSDataLoader(val_google_dataset, args.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
     val_qualcomm_dataloader = KWSDataLoader(val_qualcomm_dataset, args.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
-    eval_loader = [
-        val_dataloader, 
-        val_easy_dataloader,
-        val_hard_dataloader,
-        val_google_dataloader,
-        val_qualcomm_dataloader,
+    eval_loader = [               # loader_idx
+        val_dataloader,           # 0
+        val_easy_dataloader,      # 1
+        val_hard_dataloader,      # 2
+        val_google_dataloader,    # 3
+        val_qualcomm_dataloader,  # 4
         ]
     
     vocab = train_dataset.nPhoneme
     train_len = len(train_dataset)
 
-    return train_loader, eval_loader, val_easy_dataloader, val_hard_dataloader, val_google_dataloader, val_qualcomm_dataloader, vocab, train_len
+    return train_loader, eval_loader, vocab, train_len
 
 def main():
     wandb.init(entity="jethrowang0531", project="PhonMatchNet", name='PhonMatchNet')
@@ -155,7 +155,7 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
 
 
-    train_dataloader, eval_dataloader, val_easy_dataloader, val_hard_dataloader, val_google_dataloader, val_qualcomm_dataloader, vocab, train_len = prepare_loader(args)
+    train_dataloader, eval_dataloader, vocab, train_len = prepare_loader(args)
 
     kwargs = {
         'vocab' : vocab,
@@ -181,28 +181,12 @@ def main():
     
     test_loss = MeanMetric()
     test_loss_d = MeanMetric()
-    easy_test_loss = MeanMetric()
-    easy_test_loss_d = MeanMetric()
-    hard_test_loss = MeanMetric()
-    hard_test_loss_d = MeanMetric()
-    google_test_loss = MeanMetric()
-    google_test_loss_d = MeanMetric()
-    qualcomm_test_loss = MeanMetric()
-    qualcomm_test_loss_d = MeanMetric()
 
     train_auc = BinaryAUROC()
     train_eer = eer()
 
     test_auc = BinaryAUROC()
     test_eer = eer()
-    easy_test_auc = BinaryAUROC()
-    easy_test_eer = eer()
-    hard_test_auc = BinaryAUROC()
-    hard_test_eer = eer()
-    google_test_auc = BinaryAUROC()
-    google_test_eer = eer()
-    qualcomm_test_auc = BinaryAUROC()
-    qualcomm_test_eer = eer()
 
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr, betas = (0.9, 0.999), eps = 1e-7)
 
@@ -213,8 +197,8 @@ def main():
     for i in range(len(eval_dataloader)):
         eval_dataloader[i] = accelerator.prepare(eval_dataloader[i])
 
-    loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, easy_test_loss, easy_test_loss_d, hard_test_loss, hard_test_loss_d, google_test_loss, google_test_loss_d, qualcomm_test_loss, qualcomm_test_loss_d, train_auc, train_eer, test_auc, test_eer, easy_test_auc, easy_test_eer, hard_test_auc, hard_test_eer, google_test_auc, google_test_eer, qualcomm_test_auc, qualcomm_test_eer = accelerator.prepare(
-        loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, easy_test_loss, easy_test_loss_d, hard_test_loss, hard_test_loss_d, google_test_loss, google_test_loss_d, qualcomm_test_loss, qualcomm_test_loss_d, train_auc, train_eer, test_auc, test_eer, easy_test_auc, easy_test_eer, hard_test_auc, hard_test_eer, google_test_auc, google_test_eer, qualcomm_test_auc, qualcomm_test_eer
+    loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d = accelerator.prepare(
+        loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d
     )
 
     if accelerator.is_main_process:
@@ -333,51 +317,7 @@ def main():
 
         model.eval()
 
-        # for loader_idx, loader in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process,)):
-        #     for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
-        #         with torch.no_grad():
-        #             if args.audio_input == "raw":
-        #                 prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
-        #             elif args.audio_input == "google_embed":
-        #                 prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
-        #             elif args.audio_input == "both":
-        #                 prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
-        #             else:
-        #                 raise NotImplementedError
-                    
-        #             t_loss, LD = loss_object(batch['z'], LD)
-        #             t_loss /= args.batch_size
-        #             LD /= args.batch_size
-                    
-        #             test_loss.update(t_loss.item())
-        #             test_loss_d.update(LD.item())
-        #             test_auc.update(prob.detach(), batch['z'].detach())
-        #             test_eer.update(batch['z'].detach(), prob.detach())
-
-        #     logger.info(
-        #         f"Logging validation results..."
-        #     )
-
-        #     accelerator.log({
-        #         "val/{}/total".format(loader_idx): test_loss.compute().detach().item(),
-        #         "val/{}/d".format(loader_idx): test_loss_d.compute().detach().item(),
-        #         "val/{}/auc".format(loader_idx): test_auc.compute().detach().item(),
-        #         "val/{}/eer".format(loader_idx): test_eer.compute().detach().item(),
-        #         }, 
-        #                     step=global_step)
-            
-        #     test_loss.reset()
-        #     test_loss_d.reset()
-        #     test_auc.reset()
-        #     test_eer.reset()
-
-        #     logger.info(
-        #         f"One validation finished..."
-        #     )
-        
-        # Validation for each category
-        # easy
-        for loader_idx, loader in enumerate(tqdm(val_easy_dataloader, disable=not accelerator.is_local_main_process,)):
+        for loader_idx, loader in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process,)):
             for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
                 with torch.no_grad():
                     if args.audio_input == "raw":
@@ -393,187 +333,37 @@ def main():
                     t_loss /= args.batch_size
                     LD /= args.batch_size
                     
-                    easy_test_loss.update(t_loss.item())
-                    easy_test_loss_d.update(LD.item())
-                    easy_test_auc.update(prob.detach(), batch['z'].detach())
-                    easy_test_eer.update(batch['z'].detach(), prob.detach())
-                
-                wandb.log({
-                    "easy/val/loss/total": easy_test_loss.compute().detach().item(),
-                    "easy/val/loss/d": easy_test_loss_d.compute().detach().item(),
-                    "easy/val/auc": easy_test_auc.compute().detach().item(),
-                    "easy/val/eer": easy_test_eer.compute().detach().item(),
-                })
+                    test_loss.update(t_loss.item())
+                    test_loss_d.update(LD.item())
+                    test_auc.update(prob.detach(), batch['z'].detach())
+                    test_eer.update(batch['z'].detach(), prob.detach())
 
             logger.info(
-                f"Logging easy validation results..."
+                f"Logging validation results..."
             )
 
             accelerator.log({
-                "easy/val/{}/total".format(loader_idx): easy_test_loss.compute().detach().item(),
-                "easy/val/{}/d".format(loader_idx): easy_test_loss_d.compute().detach().item(),
-                "easy/val/{}/auc".format(loader_idx): easy_test_auc.compute().detach().item(),
-                "easy/val/{}/eer".format(loader_idx): easy_test_eer.compute().detach().item(),
+                "val/{}/total".format(loader_idx): test_loss.compute().detach().item(),
+                "val/{}/d".format(loader_idx): test_loss_d.compute().detach().item(),
+                "val/{}/auc".format(loader_idx): test_auc.compute().detach().item(),
+                "val/{}/eer".format(loader_idx): test_eer.compute().detach().item(),
                 }, 
                             step=global_step)
             
-            easy_test_loss.reset()
-            easy_test_loss_d.reset()
-            easy_test_auc.reset()
-            easy_test_eer.reset()
-
-            logger.info(
-                f"One easy validation finished..."
-            )
-        
-        # hard
-        for loader_idx, loader in enumerate(tqdm(val_hard_dataloader, disable=not accelerator.is_local_main_process,)):
-            for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
-                with torch.no_grad():
-                    if args.audio_input == "raw":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
-                    elif args.audio_input == "google_embed":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
-                    elif args.audio_input == "both":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
-                    else:
-                        raise NotImplementedError
-                    
-                    t_loss, LD = loss_object(batch['z'], LD)
-                    t_loss /= args.batch_size
-                    LD /= args.batch_size
-                    
-                    hard_test_loss.update(t_loss.item())
-                    hard_test_loss_d.update(LD.item())
-                    hard_test_auc.update(prob.detach(), batch['z'].detach())
-                    hard_test_eer.update(batch['z'].detach(), prob.detach())
-                
-                wandb.log({
-                    "hard/val/loss/total": hard_test_loss.compute().detach().item(),
-                    "hard/val/loss/d": hard_test_loss_d.compute().detach().item(),
-                    "hard/val/auc": hard_test_auc.compute().detach().item(),
-                    "hard/val/eer": hard_test_eer.compute().detach().item(),
-                })
-
-            logger.info(
-                f"Logging hard validation results..."
-            )
-
-            accelerator.log({
-                "hard/val/{}/total".format(loader_idx): hard_test_loss.compute().detach().item(),
-                "hard/val/{}/d".format(loader_idx): hard_test_loss_d.compute().detach().item(),
-                "hard/val/{}/auc".format(loader_idx): hard_test_auc.compute().detach().item(),
-                "hard/val/{}/eer".format(loader_idx): hard_test_eer.compute().detach().item(),
-                }, 
-                            step=global_step)
+            wandb.log({
+                "val/{}/total".format(loader_idx): test_loss.compute().detach().item(),
+                "val/{}/d".format(loader_idx): test_loss_d.compute().detach().item(),
+                "val/{}/auc".format(loader_idx): test_auc.compute().detach().item(),
+                "val/{}/eer".format(loader_idx): test_eer.compute().detach().item(),
+            })
             
-            hard_test_loss.reset()
-            hard_test_loss_d.reset()
-            hard_test_auc.reset()
-            hard_test_eer.reset()
+            test_loss.reset()
+            test_loss_d.reset()
+            test_auc.reset()
+            test_eer.reset()
 
             logger.info(
-                f"One hard validation finished..."
-            )
-        
-        # google
-        for loader_idx, loader in enumerate(tqdm(val_google_dataloader, disable=not accelerator.is_local_main_process,)):
-            for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
-                with torch.no_grad():
-                    if args.audio_input == "raw":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
-                    elif args.audio_input == "google_embed":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
-                    elif args.audio_input == "both":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
-                    else:
-                        raise NotImplementedError
-                    
-                    t_loss, LD = loss_object(batch['z'], LD)
-                    t_loss /= args.batch_size
-                    LD /= args.batch_size
-                    
-                    google_test_loss.update(t_loss.item())
-                    google_test_loss_d.update(LD.item())
-                    google_test_auc.update(prob.detach(), batch['z'].detach())
-                    google_test_eer.update(batch['z'].detach(), prob.detach())
-                
-                wandb.log({
-                    "google/val/loss/total": google_test_loss.compute().detach().item(),
-                    "google/val/loss/d": google_test_loss_d.compute().detach().item(),
-                    "google/val/auc": google_test_auc.compute().detach().item(),
-                    "google/val/eer": google_test_eer.compute().detach().item(),
-                })
-
-            logger.info(
-                f"Logging google validation results..."
-            )
-
-            accelerator.log({
-                "google/val/{}/total".format(loader_idx): google_test_loss.compute().detach().item(),
-                "google/val/{}/d".format(loader_idx): google_test_loss_d.compute().detach().item(),
-                "google/val/{}/auc".format(loader_idx): google_test_auc.compute().detach().item(),
-                "google/val/{}/eer".format(loader_idx): google_test_eer.compute().detach().item(),
-                }, 
-                            step=global_step)
-            
-            google_test_loss.reset()
-            google_test_loss_d.reset()
-            google_test_auc.reset()
-            google_test_eer.reset()
-
-            logger.info(
-                f"One google validation finished..."
-            )
-
-        # qualcomm
-        for loader_idx, loader in enumerate(tqdm(val_qualcomm_dataloader, disable=not accelerator.is_local_main_process,)):
-            for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
-                with torch.no_grad():
-                    if args.audio_input == "raw":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
-                    elif args.audio_input == "google_embed":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
-                    elif args.audio_input == "both":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
-                    else:
-                        raise NotImplementedError
-                    
-                    t_loss, LD = loss_object(batch['z'], LD)
-                    t_loss /= args.batch_size
-                    LD /= args.batch_size
-                    
-                    qualcomm_test_loss.update(t_loss.item())
-                    qualcomm_test_loss_d.update(LD.item())
-                    qualcomm_test_auc.update(prob.detach(), batch['z'].detach())
-                    qualcomm_test_eer.update(batch['z'].detach(), prob.detach())
-                
-                wandb.log({
-                    "qualcomm/val/loss/total": qualcomm_test_loss.compute().detach().item(),
-                    "qualcomm/val/loss/d": qualcomm_test_loss_d.compute().detach().item(),
-                    "qualcomm/val/auc": qualcomm_test_auc.compute().detach().item(),
-                    "qualcomm/val/eer": qualcomm_test_eer.compute().detach().item(),
-                })
-
-            logger.info(
-                f"Logging qualcomm validation results..."
-            )
-
-            accelerator.log({
-                "qualcomm/val/{}/total".format(loader_idx): qualcomm_test_loss.compute().detach().item(),
-                "qualcomm/val/{}/d".format(loader_idx): qualcomm_test_loss_d.compute().detach().item(),
-                "qualcomm/val/{}/auc".format(loader_idx): qualcomm_test_auc.compute().detach().item(),
-                "qualcomm/val/{}/eer".format(loader_idx): qualcomm_test_eer.compute().detach().item(),
-                }, 
-                            step=global_step)
-            
-            qualcomm_test_loss.reset()
-            qualcomm_test_loss_d.reset()
-            qualcomm_test_auc.reset()
-            qualcomm_test_eer.reset()
-
-            logger.info(
-                f"One qualcomm validation finished..."
+                f"One validation finished..."
             )
 
         # Save checkpoing

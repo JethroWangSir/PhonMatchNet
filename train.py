@@ -56,10 +56,11 @@ def parse_args():
     parser.add_argument('--sample_rate', required=False, type=int, default=16000)
     parser.add_argument('--log_mel', action='store_true')
 
-    parser.add_argument('--train_pkl', required=False, type=str, default='/share/nas169/jethrowang/PKL/train_both.pkl')
-    parser.add_argument('--google_pkl', required=False, type=str, default='/share/nas169/jethrowang/PKL/google.pkl')
-    parser.add_argument('--qualcomm_pkl', required=False, type=str, default='/share/nas169/jethrowang/PKL/qualcomm.pkl')
-    parser.add_argument('--libriphrase_pkl', required=False, type=str, default='/share/nas169/jethrowang/PKL/test_both.pkl')
+    parser.add_argument('--noise_npy', required=False, type=str, default='/share/nas169/jethrowang/DB/pkl/noise.npy')
+    parser.add_argument('--train_pkl', required=False, type=str, default='/share/nas169/jethrowang/DB/pkl/train_both.pkl')
+    parser.add_argument('--google_pkl', required=False, type=str, default='/share/nas169/jethrowang/DB/pkl/google.pkl')
+    parser.add_argument('--qualcomm_pkl', required=False, type=str, default='/share/nas169/jethrowang/DB/pkl/qualcomm.pkl')
+    parser.add_argument('--libriphrase_pkl', required=False, type=str, default='/share/nas169/jethrowang/DB/pkl/test_both.pkl')
 
     parser.add_argument(
         "--output_dir",
@@ -87,10 +88,10 @@ def prepare_loader(args):
     if args.audio_input == "raw":
         gemb_dir = None
     else:
-        gemb_dir = '/share/nas169/jethrowang/DB/'
+        gemb_dir = '/share/nas169/jethrowang/DB/npy/'
     train_dataset = libriphrase.LibriPhraseDataset(batch_size=args.batch_size, gemb_dir=gemb_dir, 
-                                                      features=args.text_input, train=True, types='both', shuffle=True, pkl=args.train_pkl, 
-                                                      frame_length=args.frame_length, hop_length=args.hop_length)
+                                                      features=args.text_input, train=True, types='both', shuffle=True, noise_npy=args.noise_npy, 
+                                                      pkl=args.train_pkl, frame_length=args.frame_length, hop_length=args.hop_length)
     train_loader = KWSDataLoader(train_dataset, args.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
 
     val_dataset = libriphrase.LibriPhraseDataset(batch_size=args.batch_size, gemb_dir=gemb_dir, 
@@ -125,8 +126,57 @@ def prepare_loader(args):
     vocab = train_dataset.nPhoneme
     train_len = len(train_dataset)
 
-    return train_loader, eval_loader, vocab, train_len
+    return train_loader, eval_loader, val_easy_dataloader, val_hard_dataloader, val_google_dataloader, val_qualcomm_dataloader, vocab, train_len
 
+def validate_model(model, dataloader, loss_object, test_loss, test_loss_d, test_auc, test_eer, accelerator, args, wandb_log_prefix, logger, global_step):
+    for loader_idx, loader in enumerate(tqdm(dataloader, disable=not accelerator.is_local_main_process)):
+        for batch_idx, batch in enumerate(tqdm(loader, desc=f"loader_idx={loader_idx}", disable=not accelerator.is_local_main_process)):
+            with torch.no_grad():
+                if args.audio_input == "raw":
+                    prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
+                elif args.audio_input == "google_embed":
+                    prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
+                elif args.audio_input == "both":
+                    prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
+                else:
+                    raise NotImplementedError
+                
+                t_loss, LD = loss_object(batch['z'], LD)
+                t_loss /= args.batch_size
+                LD /= args.batch_size
+                
+                test_loss.update(t_loss.item())
+                test_loss_d.update(LD.item())
+                test_auc.update(prob.detach(), batch['z'].detach())
+                test_eer.update(batch['z'].detach(), prob.detach())
+            
+            wandb.log({
+                f"{wandb_log_prefix}/val/loss/total": test_loss.compute().detach().item(),
+                f"{wandb_log_prefix}/val/loss/d": test_loss_d.compute().detach().item(),
+                f"{wandb_log_prefix}/val/auc": test_auc.compute().detach().item(),
+                f"{wandb_log_prefix}/val/eer": test_eer.compute().detach().item(),
+            })
+
+        logger.info(
+            f"Logging {wandb_log_prefix} validation results..."
+        )
+
+        accelerator.log({
+            f"{wandb_log_prefix}/val/{loader_idx}/total": test_loss.compute().detach().item(),
+            f"{wandb_log_prefix}/val/{loader_idx}/d": test_loss_d.compute().detach().item(),
+            f"{wandb_log_prefix}/val/{loader_idx}/auc": test_auc.compute().detach().item(),
+            f"{wandb_log_prefix}/val/{loader_idx}/eer": test_eer.compute().detach().item(),
+        }, 
+        step=global_step)
+        
+        test_loss.reset()
+        test_loss_d.reset()
+        test_auc.reset()
+        test_eer.reset()
+
+        logger.info(
+            f"One {wandb_log_prefix} validation finished..."
+        )
 
 def main():
     wandb.init(entity="jethrowang0531", project="PhonMatchNet", name='PhonMatchNet')
@@ -155,7 +205,7 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
 
 
-    train_dataloader, eval_dataloader, vocab, train_len = prepare_loader(args)
+    train_dataloader, eval_dataloader, val_easy_dataloader, val_hard_dataloader, val_google_dataloader, val_qualcomm_dataloader, vocab, train_len = prepare_loader(args)
 
     kwargs = {
         'vocab' : vocab,
@@ -181,12 +231,28 @@ def main():
     
     test_loss = MeanMetric()
     test_loss_d = MeanMetric()
+    easy_test_loss = MeanMetric()
+    easy_test_loss_d = MeanMetric()
+    hard_test_loss = MeanMetric()
+    hard_test_loss_d = MeanMetric()
+    google_test_loss = MeanMetric()
+    google_test_loss_d = MeanMetric()
+    qualcomm_test_loss = MeanMetric()
+    qualcomm_test_loss_d = MeanMetric()
 
     train_auc = BinaryAUROC()
     train_eer = eer()
 
     test_auc = BinaryAUROC()
     test_eer = eer()
+    easy_test_auc = BinaryAUROC()
+    easy_test_eer = eer()
+    hard_test_auc = BinaryAUROC()
+    hard_test_eer = eer()
+    google_test_auc = BinaryAUROC()
+    google_test_eer = eer()
+    qualcomm_test_auc = BinaryAUROC()
+    qualcomm_test_eer = eer()
 
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr, betas = (0.9, 0.999), eps = 1e-7)
 
@@ -197,8 +263,8 @@ def main():
     for i in range(len(eval_dataloader)):
         eval_dataloader[i] = accelerator.prepare(eval_dataloader[i])
 
-    loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, train_auc, train_eer, test_auc, test_eer = accelerator.prepare(
-        loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, train_auc, train_eer, test_auc, test_eer
+    loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, easy_test_loss, easy_test_loss_d, hard_test_loss, hard_test_loss_d, google_test_loss, google_test_loss_d, qualcomm_test_loss, qualcomm_test_loss_d, train_auc, train_eer, test_auc, test_eer, easy_test_auc, easy_test_eer, hard_test_auc, hard_test_eer, google_test_auc, google_test_eer, qualcomm_test_auc, qualcomm_test_eer = accelerator.prepare(
+        loss_object, loss_object_sce, train_loss, train_loss_d, train_loss_sce, test_loss, test_loss_d, easy_test_loss, easy_test_loss_d, hard_test_loss, hard_test_loss_d, google_test_loss, google_test_loss_d, qualcomm_test_loss, qualcomm_test_loss_d, train_auc, train_eer, test_auc, test_eer, easy_test_auc, easy_test_eer, hard_test_auc, hard_test_eer, google_test_auc, google_test_eer, qualcomm_test_auc, qualcomm_test_eer
     )
 
     if accelerator.is_main_process:
@@ -223,7 +289,7 @@ def main():
         progress_bar = tqdm(
             range(int(args.epoch * train_len/(args.batch_size * accelerator.num_processes))),
             initial=global_step,
-            desc="Epoch {}".format(epoch),
+            desc="Epoch {}".format(epoch+1),
             # Only show the progress bar once on each machine.
             disable=not accelerator.is_local_main_process,
         )
@@ -317,57 +383,14 @@ def main():
 
         model.eval()
         
-        for loader_idx, loader in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process,)):
-            for batch_idx, batch in enumerate(tqdm(loader, desc="loader_idx={}".format(loader_idx), disable=not accelerator.is_local_main_process,)):
-                with torch.no_grad():
-                    if args.audio_input == "raw":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["x"], batch["y"], batch["x_len"], batch["y_len"])
-                    elif args.audio_input == "google_embed":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model(batch["gemb"], batch["y"], batch["gemb_len"], batch["y_len"])
-                    elif args.audio_input == "both":
-                        prob, affinity_matrix, LD, seq_logit, affinity_mask, seq_logit_mask = model((batch["x"], batch["gemb"]), batch["y"], (batch["x_len"], batch["gemb_len"]), batch["y_len"])
-                    else:
-                        raise NotImplementedError
-                    
-                    t_loss, LD = loss_object(batch['z'], LD)
-                    t_loss /= args.batch_size
-                    LD /= args.batch_size
-                    
-                    test_loss.update(t_loss.item())
-                    test_loss_d.update(LD.item())
-                    test_auc.update(prob.detach(), batch['z'].detach())
-                    test_eer.update(batch['z'].detach(), prob.detach())
-                
-                wandb.log({
-                    "val/loss/total": test_loss.compute().detach().item(),
-                    "val/loss/d": test_loss_d.compute().detach().item(),
-                    "val/auc": test_auc.compute().detach().item(),
-                    "val/eer": test_eer.compute().detach().item(),
-                })
-
-            logger.info(
-                f"Logging validation results..."
-            )
-
-            accelerator.log({
-                "val/{}/total".format(loader_idx): test_loss.compute().detach().item(),
-                "val/{}/d".format(loader_idx): test_loss_d.compute().detach().item(),
-                "val/{}/auc".format(loader_idx): test_auc.compute().detach().item(),
-                "val/{}/eer".format(loader_idx): test_eer.compute().detach().item(),
-                }, 
-                            step=global_step)
-            
-            test_loss.reset()
-            test_loss_d.reset()
-            test_auc.reset()
-            test_eer.reset()
-
-            logger.info(
-                f"One validation finished..."
-            )
+        # Validation for each category
+        validate_model(model, val_easy_dataloader, loss_object, easy_test_loss, easy_test_loss_d, easy_test_auc, easy_test_eer, accelerator, args, "easy", logger, global_step)
+        validate_model(model, val_hard_dataloader, loss_object, hard_test_loss, hard_test_loss_d, hard_test_auc, hard_test_eer, accelerator, args, "hard", logger, global_step)
+        validate_model(model, val_google_dataloader, loss_object, google_test_loss, google_test_loss_d, google_test_auc, google_test_eer, accelerator, args, "google", logger, global_step)
+        validate_model(model, val_qualcomm_dataloader, loss_object, qualcomm_test_loss, qualcomm_test_loss_d, qualcomm_test_auc, qualcomm_test_eer, accelerator, args, "qualcomm", logger, global_step)
 
         # Save checkpoing
-        ckpt_dir = f"checkpoint/epoch_{epoch}"
+        ckpt_dir = f"checkpoint/epoch_{epoch+1}"
         ckpt_dir = os.path.join(args.output_dir, ckpt_dir)
         os.makedirs(ckpt_dir, exist_ok=True)
         accelerator.save_state(ckpt_dir)

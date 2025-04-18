@@ -56,7 +56,7 @@ class QualcommKeywordSpeechDataset(torch.utils.data.Dataset):
         self.data = pd.DataFrame(columns=['wav', 'text', 'duration', 'label'])
 
         if (self.pkl is not None) and (os.path.isfile(self.pkl)):
-            print(">> Load dataset from {}".format(self.pkl))
+            print(">> Loading dataset from {}".format(self.pkl))
             self.data = pd.read_pickle(self.pkl)
         else:
             print(">> Make dataset from {}".format(self.wav_dir))
@@ -101,6 +101,7 @@ class QualcommKeywordSpeechDataset(torch.utils.data.Dataset):
         # Set dataloader params.
         self.len = len(self.data)
         self.maxlen_t = int((int(self.data['text'].apply(lambda x: len(x)).max() / 10) + 1) * 10)
+        # print(f'maxlen_t: {self.maxlen_t}')
         self.maxlen_a = int((int(self.data['duration'].values[-1] / 0.5) + 1 ) * self.fs / 2)
                             
     def __len__(self):

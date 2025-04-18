@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from scipy.io import wavfile
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 sys.path.append(os.path.dirname(__file__))
 from g2p.g2p_en.g2p import G2p
@@ -26,6 +27,7 @@ class LibriPhraseDataset(torch.utils.data.Dataset):
                  features='g2p_embed', # phoneme, g2p_embed, both ...
                  train=True,
                  shuffle=True,
+                 noise_npy=None,
                  pkl=None,
                  edit_dist=False,
                  frame_length=None,
@@ -56,6 +58,7 @@ class LibriPhraseDataset(torch.utils.data.Dataset):
         self.features = features
         self.train = train
         self.shuffle = shuffle
+        self.noise_npy = noise_npy
         self.pkl = pkl
         self.edit_dist = edit_dist
         self.frame_length = frame_length
@@ -68,20 +71,28 @@ class LibriPhraseDataset(torch.utils.data.Dataset):
     
     def __prep__(self):
         if self.train:
-            print(">> Preparing noise DB")
-            noise_list = [str(x) for x in Path(self.noise_dir).rglob('*.wav')]
-            self.noise = np.array([])
-            for noise in noise_list:
-                fs, data = wavfile.read(noise)
-                assert fs == self.fs, ">> Error : Un-match sampling freq.\n{} -> {}".format(noise, fs)
-                data = data.astype(np.float32) / 32768.0
-                data = (data / np.max(data)) * 0.5
-                self.noise = np.append(self.noise, data)
+            if (self.noise_npy is not None) and (os.path.isfile(self.noise_npy)):
+                print(">> Loading cached noise DB")
+                self.noise = np.load(self.noise_npy)
+            else:
+                print(">> Preparing noise DB")
+                noise_list = [str(x) for x in Path(self.noise_dir).rglob('*.wav')]
+                noise_data = []
+
+                for noise in tqdm(noise_list, desc="Loading noise files"):
+                    fs, data = wavfile.read(noise)
+                    assert fs == self.fs, ">> Error : Un-match sampling freq.\n{} -> {}".format(noise, fs)
+                    data = data.astype(np.float32) / 32768.0
+                    data = (data / np.max(data)) * 0.5
+                    noise_data.append(data)
+
+                self.noise = np.concatenate(noise_data)
+                np.save(self.noise_npy, self.noise)
             
         self.data = pd.DataFrame(columns=['wav_label', 'wav', 'text', 'duration', 'label', 'type'])
 
         if (self.pkl is not None) and (os.path.isfile(self.pkl)):
-            print(">> Load dataset from {}".format(self.pkl))
+            print(">> Loading dataset from {}".format(self.pkl))
             self.data = pd.read_pickle(self.pkl)
         else:
             for db in self.train_csv if self.train else self.test_csv:
@@ -146,6 +157,7 @@ class LibriPhraseDataset(torch.utils.data.Dataset):
         # Set dataloader params.
         self.len = len(self.data)
         self.maxlen_t = int((int(self.data['text'].apply(lambda x: len(x)).max() / 10) + 1) * 10)
+        # print(f'maxlen_t: {self.maxlen_t}')
         self.maxlen_a = int((int(self.data['duration'].values[-1] / 0.5) + 1 ) * self.fs / 2)
         self.maxlen_l = int((int(self.data['wav_label'].apply(lambda x: len(x)).max() / 10) + 1) * 10)
                             

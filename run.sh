@@ -9,5 +9,5 @@ python train.py \
         --loss_weight 1.0 1.0 \
         --audio_input both \
         --text_input g2p_embed \
-        --stack_extractor \
+        --output_dir ./results/c_attn \
         --comment 'user comments for each experiment'

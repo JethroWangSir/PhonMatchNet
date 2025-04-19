@@ -129,9 +129,9 @@ def prepare_loader(args):
     return train_loader, eval_loader, vocab, train_len
 
 def main():
-    wandb.init(entity="jethrowang0531", project="PhonMatchNet", name='PhonMatchNet')
-    
     args = parse_args()
+
+    wandb.init(entity="jethrowang0531", project="PhonMatchNet", name=args.output_dir)
 
     logging_dir = Path(args.output_dir, args.logging_dir)
 

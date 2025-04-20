@@ -95,6 +95,10 @@ class BaseUKWS(ukws):
         
         self.seq_ce_logit = nn.Linear(embedding, 1)         # Additional phoneme discriminator
 
+        self.subseq_ce_logits = nn.ModuleList([             # Additional subsequence phoneme discriminator
+            nn.Linear(embedding * (i + 1), 1) for i in range(40)
+        ])
+
     def forward(self, speech, text, speech_len=None, text_len=None, verbose=False):
         """
         Args:
@@ -139,14 +143,32 @@ class BaseUKWS(ukws):
             indices = torch.masked_fill(torch.cumsum(valid_mask.int(), dim=1), ~valid_mask, 0)
             masked = torch.zeros(attention_output.shape[0], attention_output.shape[1]+1, attention_output.shape[2]).to(attention_output.device)
             masked = torch.scatter(input=masked, dim=1, index=torch.stack([indices for _ in range(attention_output.shape[-1])], dim=-1), src=attention_output)
-            valid_attention_output = masked[:,1:torch.max(n_text)+1]
-            seq_ce_logit = self.seq_ce_logit(valid_attention_output)[:,:,0]
+            valid_attention_output = masked[:, 1:torch.max(n_text)+1]
+
+            if self.subsequence_phoneme:
+                B, T, D = valid_attention_output.shape
+                max_steps = min(T, len(self.subseq_ce_logits))  # limit to available discriminators
+                logits_list = []
+
+                for i in range(max_steps):
+                    # accumulate the previous i+1 time steps (including the current one)
+                    subseq = valid_attention_output[:, :i+1, :]  # [B, i+1, D]
+                    subseq_concat = subseq.reshape(B, -1)        # [B, (i+1)*D]
+                    logit = self.subseq_ce_logits[i](subseq_concat)  # [B, 1]
+                    logits_list.append(logit)
+
+                # merge [B, 1] * T into [B, T]
+                seq_ce_logit = torch.cat(logits_list, dim=1)
+                
+            else:
+                seq_ce_logit = self.seq_ce_logit(valid_attention_output)[:, :, 0]
+            
             seq_ce_logit = nn.functional.pad(seq_ce_logit, (0, emb_t.shape[1] - seq_ce_logit.shape[1]), value=0.)
             seq_ce_logit_mask = emb_t_mask
             seq_ce_logit = torch.nan_to_num(seq_ce_logit) * seq_ce_logit_mask
         
         else:
-            seq_ce_logit = self.seq_ce_logit(attention_output)[:,:,0]
+            seq_ce_logit = self.seq_ce_logit(attention_output)[:, :, 0]
             seq_ce_logit_mask = attention_mask
             seq_ce_logit = torch.nan_to_num(seq_ce_logit) * seq_ce_logit_mask
         

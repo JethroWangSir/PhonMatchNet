@@ -48,6 +48,7 @@ def parse_args():
     parser.add_argument('--audio_input', required=False, type=str, default='both')
     parser.add_argument('--stack_extractor', action='store_true')
     parser.add_argument('--audio_noise', action='store_true')
+    parser.add_argument('--subsequence_phoneme', action='store_true')
 
     parser.add_argument('--frame_length', required=False, type=int, default=400)
     parser.add_argument('--hop_length', required=False, type=int, default=160)

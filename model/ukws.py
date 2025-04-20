@@ -33,6 +33,7 @@ class BaseUKWS(ukws):
         self.audio_input = kwargs['audio_input']
         self.text_input = kwargs['text_input']
         self.stack_extractor = kwargs['stack_extractor']
+        self.subsequence_phoneme = kwargs['subsequence_phoneme']
         
         _stft={
             'frame_length' : kwargs['frame_length'], 
@@ -93,11 +94,12 @@ class BaseUKWS(ukws):
         
         self.DIS = discriminator.BaseDiscriminator(**_dis)  # Basic keyword discriminator
         
-        self.seq_ce_logit = nn.Linear(embedding, 1)         # Additional phoneme discriminator
-
-        self.subseq_ce_logits = nn.ModuleList([             # Additional subsequence phoneme discriminator
-            nn.Linear(embedding * (i + 1), 1) for i in range(40)
-        ])
+        if kwargs['subsequence_phoneme']:
+            self.subseq_ce_logits = nn.ModuleList([         # Additional subsequence phoneme discriminator
+                nn.Linear(embedding * (i + 1), 1) for i in range(40)
+            ])
+        else:
+            self.seq_ce_logit = nn.Linear(embedding, 1)     # Additional phoneme discriminator
 
     def forward(self, speech, text, speech_len=None, text_len=None, verbose=False):
         """

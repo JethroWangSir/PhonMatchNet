@@ -163,6 +163,7 @@ def main():
         'text_input' : args.text_input,
         'audio_input' : args.audio_input,
         'stack_extractor' : args.stack_extractor,
+        'subsequence_phoneme' : args.subsequence_phoneme,
 
         'frame_length' : args.frame_length, 
         'hop_length' : args.hop_length, 

@@ -10,6 +10,5 @@ python train.py \
         --audio_input both \
         --text_input g2p_embed \
         --stack_extractor \
-        --subsequence_phoneme \
-        --output_dir ./results/l_sub \
+        --output_dir ./results/test \
         --comment 'user comments for each experiment'

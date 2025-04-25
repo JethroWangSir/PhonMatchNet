@@ -125,6 +125,7 @@ def prepare_loader(args):
         ]
     
     vocab = train_dataset.nPhoneme
+    print(f'vocab: {vocab}')
     train_len = len(train_dataset)
 
     return train_loader, eval_loader, vocab, train_len

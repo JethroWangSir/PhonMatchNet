@@ -149,7 +149,7 @@ def preprocess_qualcomm(wav_dir = '/share/nas169/albertali/Zero-shot-phonmatchne
 
 
 def main():
-        save_dir='/share/nas169/jethrowang/DB/'
+        save_dir='/share/nas169/jethrowang/DB/npy'
         preprocess_libriphrase(save_dir=save_dir, train=True)
         preprocess_libriphrase(save_dir=save_dir, train=False)
         preprocess_google(save_dir=save_dir)

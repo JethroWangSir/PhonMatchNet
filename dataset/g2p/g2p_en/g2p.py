@@ -247,3 +247,4 @@ if __name__ == '__main__':
         emb = g2p.embedding(text)
         print(out)
         print(emb.shape)
+        print(emb)

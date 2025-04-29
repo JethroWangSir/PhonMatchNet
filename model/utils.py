@@ -28,6 +28,7 @@ def make_adjacency_matrix(speech_mask, text_mask):
     mask = mask.unsqueeze(-1) * mask.unsqueeze(1)
     # Make upper triangle matrix for adj. matrix
     adjacency_matrix = torch.tril(mask)
+    # print(f'adjacency_matrix: {adjacency_matrix.shape}')
     
     return adjacency_matrix
 
@@ -56,5 +57,6 @@ def make_feature_matrix(speech_features, text_features, speech_mask, text_mask):
     masked = torch.zeros(feature_matrix.shape[0], feature_matrix.shape[1]+1, feature_matrix.shape[2]).to(feature_matrix.device)
     masked = torch.scatter(input=masked, dim=1, index=torch.stack([indices for _ in range(feature_matrix.shape[-1])], dim=-1), src=feature_matrix)
     masked = masked[:,1:max_len+1]
+    # print(f'masked: {masked.shape}')
 
     return masked

@@ -10,5 +10,5 @@ python train.py \
         --audio_input both \
         --text_input g2p_embed \
         --stack_extractor \
-        --output_dir ./results/test \
+        --output_dir ./results/h_ext \
         --comment 'user comments for each experiment'

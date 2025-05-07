@@ -10,5 +10,6 @@ python train.py \
         --audio_input both \
         --text_input g2p_embed \
         --stack_extractor \
-        --output_dir ./results/h_ext \
+        --film_fusion \
+        --output_dir ./results/film \
         --comment 'user comments for each experiment'

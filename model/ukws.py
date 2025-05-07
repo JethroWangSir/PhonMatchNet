@@ -34,6 +34,7 @@ class BaseUKWS(ukws):
         self.text_input = kwargs['text_input']
         self.stack_extractor = kwargs['stack_extractor']
         self.subsequence_phoneme = kwargs['subsequence_phoneme']
+        self.film_fusion = kwargs['film_fusion']
         
         _stft={
             'frame_length' : kwargs['frame_length'], 
@@ -56,6 +57,7 @@ class BaseUKWS(ukws):
             # fully-connected layer unit
             'fc' : embedding,                                  
             'audio_input' : self.audio_input,
+            'film_fusion' : self.film_fusion,
         }
         _te = {
             # fully-connected layer unit

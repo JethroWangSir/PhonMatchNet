@@ -93,6 +93,19 @@ class AudioEncoder(Encoder):
         return x, LD, mask
 
 
+class FusionFiLM(nn.Module):
+    def __init__(self, in_dim):
+        super().__init__()
+        self.scale_gen = nn.Linear(in_dim, in_dim)
+        self.shift_gen = nn.Linear(in_dim, in_dim)
+
+    def forward(self, x, cond):
+        # x: (B, T, D), cond: (B, T, D)
+        scale = self.scale_gen(cond)
+        shift = self.shift_gen(cond)
+        return x * scale + shift
+
+
 class EfficientAudioEncoder(Encoder):
     """Efficient encoder class for audio encoders"""
     
@@ -124,6 +137,9 @@ class EfficientAudioEncoder(Encoder):
         
         self.act = nn.LeakyReLU()
 
+        if kwargs['film_fusion']:
+            self.film_fusion = FusionFiLM(kwargs['fc'])
+
     def forward(self, src, src_mask=None, verbose=False):
         """
         Args:
@@ -151,22 +167,41 @@ class EfficientAudioEncoder(Encoder):
         LD = x
 
         # [B, T/8, dense] or [B, T/2, dense]
-        if self.downsample:
-            y = self.act(self.dense(gembed))
-
-            # Summation two embedding
-            x = x + nn.functional.pad(y, (0, 0, 0, x.shape[1] - y.shape[1], 0, 0), value=0.0)
-        else:
-            y = gembed.transpose(1, 2)
-            y = self.act(self.deConv(y))
-            y = y.transpose(1, 2)
-
-            if x.shape[1] > y.shape[1]:
-                x = x + nn.functional.pad(y, (0, 0, 0, x.shape[1] - y.shape[1], 0, 0), value=0.0)
-            elif x.shape[1] < y.shape[1]:
-                x = x + y[:, :x.shape[1], :]
+        if self.kwargs['film_fusion']:
+            if self.downsample:
+                y = self.act(self.dense(gembed))  # (B, T/8, D)
+                if x.shape[1] > y.shape[1]:
+                    y = F.pad(y, (0, 0, 0, x.shape[1] - y.shape[1]), value=0.0)
+                elif x.shape[1] < y.shape[1]:
+                    y = y[:, :x.shape[1], :]
             else:
-                x = x + y
+                y = gembed.transpose(1, 2)  # (B, 96, T/8)
+                y = self.act(self.deConv(y))  # (B, D, T)
+                y = y.transpose(1, 2)
+                if x.shape[1] > y.shape[1]:
+                    y = F.pad(y, (0, 0, 0, x.shape[1] - y.shape[1]), value=0.0)
+                elif x.shape[1] < y.shape[1]:
+                    y = y[:, :x.shape[1], :]
+
+            x = self.film_fusion(x, y)
+
+        else:
+            if self.downsample:
+                y = self.act(self.dense(gembed))
+
+                # Summation two embedding
+                x = x + nn.functional.pad(y, (0, 0, 0, x.shape[1] - y.shape[1], 0, 0), value=0.0)
+            else:
+                y = gembed.transpose(1, 2)
+                y = self.act(self.deConv(y))
+                y = y.transpose(1, 2)
+
+                if x.shape[1] > y.shape[1]:
+                    x = x + nn.functional.pad(y, (0, 0, 0, x.shape[1] - y.shape[1], 0, 0), value=0.0)
+                elif x.shape[1] < y.shape[1]:
+                    x = x + y[:, :x.shape[1], :]
+                else:
+                    x = x + y
         
         x = torch.nan_to_num(x) * mask.unsqueeze(-1)
         LD = torch.nan_to_num(LD) * mask.unsqueeze(-1)

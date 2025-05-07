@@ -58,7 +58,7 @@ class MultiHeadAttention(nn.Module):
 
         attention_score = torch.matmul(query.transpose(1, 2), key.transpose(2, 3)) # Q x K^T, `(Batch, Heads, L_q, L_k)`
         attention_score = attention_score / self.sqrt_dim
-        print(f'attention_score: {attention_score.shape}')
+        # print(f'attention_score: {attention_score.shape}')
 
         if mask is not None:
             # print(f'mask: {mask.shape}')

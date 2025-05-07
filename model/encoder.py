@@ -115,6 +115,7 @@ class EfficientAudioEncoder(Encoder):
         self.layer = [] 
         self.deConv = None
         last_input_features = kwargs['input_dim']
+        self.film_fusioning = kwargs['film_fusion']
 
         if self.downsample:
             self.layer.append(nn.Conv1d(last_input_features, kwargs['fc'], 5, stride=2, padding=2))
@@ -137,7 +138,7 @@ class EfficientAudioEncoder(Encoder):
         
         self.act = nn.LeakyReLU()
 
-        if kwargs['film_fusion']:
+        if self.film_fusioning:
             self.film_fusion = FusionFiLM(kwargs['fc'])
 
     def forward(self, src, src_mask=None, verbose=False):
@@ -167,7 +168,7 @@ class EfficientAudioEncoder(Encoder):
         LD = x
 
         # [B, T/8, dense] or [B, T/2, dense]
-        if self.kwargs['film_fusion']:
+        if self.film_fusioning:
             if self.downsample:
                 y = self.act(self.dense(gembed))  # (B, T/8, D)
                 if x.shape[1] > y.shape[1]:

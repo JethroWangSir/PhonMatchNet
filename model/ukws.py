@@ -34,7 +34,6 @@ class BaseUKWS(ukws):
         self.text_input = kwargs['text_input']
         self.stack_extractor = kwargs['stack_extractor']
         self.subsequence_phoneme = kwargs['subsequence_phoneme']
-        self.hierarchical_extractor = kwargs['hierarchical_extractor']
         
         _stft={
             'frame_length' : kwargs['frame_length'], 
@@ -88,9 +87,7 @@ class BaseUKWS(ukws):
 
         self.TE = encoder.TextEncoder(**_te)
 
-        if kwargs['hierarchical_extractor']:
-            self.EXT = extractor.HierarchicalExtractor(**_ext)  #  local feature self-attention -> joint feature self-attention
-        elif kwargs['stack_extractor']: 
+        if kwargs['stack_extractor']: 
             self.EXT = extractor.StackExtractor(**_ext)     # self-attention
         else:
             self.EXT = extractor.BaseExtractor(**_ext)      # cross-attention

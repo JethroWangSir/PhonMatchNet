@@ -50,6 +50,7 @@ def parse_args():
     parser.add_argument('--audio_noise', action='store_true')
     parser.add_argument('--subsequence_phoneme', action='store_true')
     parser.add_argument('--film_fusion', action='store_true')
+    parser.add_argument('--text_residual', action='store_true')
 
     parser.add_argument('--frame_length', required=False, type=int, default=400)
     parser.add_argument('--hop_length', required=False, type=int, default=160)
@@ -167,6 +168,7 @@ def main():
         'stack_extractor' : args.stack_extractor,
         'subsequence_phoneme' : args.subsequence_phoneme,
         'film_fusion' : args.film_fusion,
+        'text_residual' : args.text_residual,
 
         'frame_length' : args.frame_length, 
         'hop_length' : args.hop_length, 

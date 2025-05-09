@@ -35,6 +35,7 @@ class BaseUKWS(ukws):
         self.stack_extractor = kwargs['stack_extractor']
         self.subsequence_phoneme = kwargs['subsequence_phoneme']
         self.film_fusion = kwargs['film_fusion']
+        self.text_residual = kwargs['text_residual']
         
         _stft={
             'frame_length' : kwargs['frame_length'], 
@@ -149,6 +150,10 @@ class BaseUKWS(ukws):
             masked = torch.scatter(input=masked, dim=1, index=torch.stack([indices for _ in range(attention_output.shape[-1])], dim=-1), src=attention_output)
             valid_attention_output = masked[:, 1:torch.max(n_text)+1]
 
+            if self.text_residual:
+                emb_t_trimmed = emb_t[:, :valid_attention_output.shape[1], :]
+                valid_attention_output += emb_t_trimmed
+
             if self.subsequence_phoneme:
                 B, T, D = valid_attention_output.shape
                 max_steps = min(T, len(self.subseq_ce_logits))  # limit to available discriminators
@@ -176,5 +181,4 @@ class BaseUKWS(ukws):
             seq_ce_logit_mask = attention_mask
             seq_ce_logit = torch.nan_to_num(seq_ce_logit) * seq_ce_logit_mask
         
-
         return prob, affinity_matrix, LD, seq_ce_logit, affinity_mask, seq_ce_logit_mask

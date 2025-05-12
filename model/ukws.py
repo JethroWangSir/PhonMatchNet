@@ -75,7 +75,8 @@ class BaseUKWS(ukws):
         _dis = {
             'input_dim' : embedding,
             # [unit]
-            'gru' : [[embedding],],     
+            'gru' : [[embedding],],   
+            'text_avgpool' : kwargs['text_avgpool'],
         }
 
         if self.audio_input == 'both':  # two-stream audio encoder
@@ -135,9 +136,10 @@ class BaseUKWS(ukws):
             emb_s, LDN, emb_s_mask = self.AE(speech, s_mask, verbose)
         
         emb_t, emb_t_mask = self.TE(text, verbose)
+        # print(f'emb_t: {emb_t.shape}')  # [512, 40, 128]
         
         attention_output, affinity_matrix, attention_mask, affinity_mask = self.EXT(emb_s, emb_t, emb_s_mask, emb_t_mask, verbose)
-        prob, LD = self.DIS(attention_output, attention_mask, verbose)
+        prob, LD = self.DIS(emb_t, attention_output, attention_mask, verbose)
         
         if self.stack_extractor:
             n_speech = torch.sum(emb_s_mask, dim=-1)

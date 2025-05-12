@@ -38,7 +38,10 @@ class BaseDiscriminator(Discriminator):
         self.dense = nn.Linear(kwargs['gru'][-1][0], 1)
         self.act = nn.Sigmoid()
 
-    def forward(self, src, src_mask=None, verbose=False):
+        self.text_avgpool = kwargs['text_avgpool']
+        self.avgpool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, emb_t, src, src_mask=None, verbose=False):
         """
         Args:
             src         : source of shape `(batch, time, feature)`
@@ -54,6 +57,12 @@ class BaseDiscriminator(Discriminator):
         
         n_src = torch.sum(src_mask, -1) - torch.tensor(1.0)
         x = x[torch.arange(n_src.shape[0]).to(n_src.device).long(), n_src.long()]      # Take only final features (B, embedding)
+
+        if self.text_avgpool:
+            emb_t = emb_t.permute(0, 2, 1)  # (B, embedding, T)
+            emb_t = self.avgpool(emb_t)  # (B, embedding, 1)
+            emb_t = emb_t.squeeze(2)  # (B, embedding)
+            x += emb_t
         
         x = self.dense(x)                # (B, 1)
 

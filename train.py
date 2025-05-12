@@ -51,6 +51,7 @@ def parse_args():
     parser.add_argument('--subsequence_phoneme', action='store_true')
     parser.add_argument('--film_fusion', action='store_true')
     parser.add_argument('--text_residual', action='store_true')
+    parser.add_argument('--text_avgpool', action='store_true')
 
     parser.add_argument('--frame_length', required=False, type=int, default=400)
     parser.add_argument('--hop_length', required=False, type=int, default=160)
@@ -169,6 +170,7 @@ def main():
         'subsequence_phoneme' : args.subsequence_phoneme,
         'film_fusion' : args.film_fusion,
         'text_residual' : args.text_residual,
+        'text_avgpool' : args.text_avgpool,
 
         'frame_length' : args.frame_length, 
         'hop_length' : args.hop_length, 

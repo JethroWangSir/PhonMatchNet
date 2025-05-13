@@ -36,6 +36,7 @@ class BaseUKWS(ukws):
         self.subsequence_phoneme = kwargs['subsequence_phoneme']
         self.film_fusion = kwargs['film_fusion']
         self.text_residual = kwargs['text_residual']
+        self.vad = kwargs['vad']
         
         _stft={
             'frame_length' : kwargs['frame_length'], 
@@ -59,6 +60,7 @@ class BaseUKWS(ukws):
             'fc' : embedding,                                  
             'audio_input' : self.audio_input,
             'film_fusion' : self.film_fusion,
+            'vad' : self.vad,
         }
         _te = {
             # fully-connected layer unit
@@ -125,7 +127,7 @@ class BaseUKWS(ukws):
             assert gemb.shape[-1] == 96
             assert speech.shape[1]//8 == gemb.shape[1]
             g_mask = sequence_mask(g_len, gemb.shape[1])
-            emb_s, LDN, emb_s_mask = self.AE((speech, gemb), (s_mask, g_mask), verbose)
+            emb_s, LDN, emb_s_mask, emb_s_prob = self.AE((speech, gemb), (s_mask, g_mask), verbose)
         else:           
             if self.audio_input == 'raw': 
                 speech, s_mask = self.FEAT(speech, verbose)
@@ -133,7 +135,7 @@ class BaseUKWS(ukws):
                 speech = speech
                 s_mask = sequence_mask(speech_len, speech.shape[1])
             
-            emb_s, LDN, emb_s_mask = self.AE(speech, s_mask, verbose)
+            emb_s, LDN, emb_s_mask, _ = self.AE(speech, s_mask, verbose)
         
         emb_t, emb_t_mask = self.TE(text, verbose)
         # print(f'emb_t: {emb_t.shape}')  # [512, 40, 128]

@@ -59,7 +59,7 @@ class BaseDiscriminator(Discriminator):
         x = x[torch.arange(n_src.shape[0]).to(n_src.device).long(), n_src.long()]      # Take only final features (B, embedding)
 
         if self.text_avgpool:
-            emb_t = emb_t.permute(0, 2, 1)  # (B, embedding, T)
+            emb_t = emb_t.permute(0, 2, 1)  # (B, embedding, phoneme)
             emb_t = self.avgpool(emb_t)  # (B, embedding, 1)
             emb_t = emb_t.squeeze(2)  # (B, embedding)
             x += emb_t

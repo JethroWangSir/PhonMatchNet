@@ -117,6 +117,8 @@ class EfficientAudioEncoder(Encoder):
         self.deConv = None
         last_input_features = kwargs['input_dim']
         self.film_fusioning = kwargs['film_fusion']
+        self.vad = kwargs['vad']
+        self.vad_layer = []
 
         if self.downsample:
             self.layer.append(nn.Conv1d(last_input_features, kwargs['fc'], 5, stride=2, padding=2))
@@ -141,6 +143,11 @@ class EfficientAudioEncoder(Encoder):
 
         if self.film_fusioning:
             self.film_fusion = FusionFiLM(kwargs['fc'])
+        
+        if self.vad:
+            self.vad_layer.append(nn.AdaptiveAvgPool1d(1))
+            self.vad_layer.append(nn.Linear(kwargs['fc'], 1))
+            self.vad_layer.append(nn.Sigmoid())
 
     def forward(self, src, src_mask=None, verbose=False):
         """
@@ -205,10 +212,14 @@ class EfficientAudioEncoder(Encoder):
                 else:
                     x = x + y
         
-        x = torch.nan_to_num(x) * mask.unsqueeze(-1)
+        x = torch.nan_to_num(x) * mask.unsqueeze(-1)  # (B, time, embedding)
         LD = torch.nan_to_num(LD) * mask.unsqueeze(-1)
 
-        return x, LD, mask
+        if self.vad:
+            z = x.permute(0, 2, 1)  # (B, embedding, time)
+            z = self.vad_layer(z)  # (B, 1)
+
+        return x, LD, mask, z
 
 
 class TextEncoder(Encoder):

@@ -10,6 +10,6 @@ python train.py \
         --audio_input both \
         --text_input g2p_embed \
         --stack_extractor \
-        --text_avgpool \
-        --output_dir ./results/text_avgpool \
+        --vad \
+        --output_dir ./results/vad \
         --comment 'user comments for each experiment'

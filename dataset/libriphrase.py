@@ -156,7 +156,8 @@ class LibriPhraseDataset(torch.utils.data.Dataset):
         
         # Set dataloader params.
         self.len = len(self.data)
-        self.maxlen_t = int((int(self.data['text'].apply(lambda x: len(x)).max() / 10) + 1) * 10)
+        # self.maxlen_t = int((int(self.data['text'].apply(lambda x: len(x)).max() / 10) + 1) * 10)
+        self.maxlen_t = 30
         # print(f'maxlen_t: {self.maxlen_t}')
         self.maxlen_a = int((int(self.data['duration'].values[-1] / 0.5) + 1 ) * self.fs / 2)
         self.maxlen_l = int((int(self.data['wav_label'].apply(lambda x: len(x)).max() / 10) + 1) * 10)

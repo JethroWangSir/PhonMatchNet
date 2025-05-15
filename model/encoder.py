@@ -215,11 +215,12 @@ class EfficientAudioEncoder(Encoder):
         x = torch.nan_to_num(x) * mask.unsqueeze(-1)  # (B, time, embedding)
         LD = torch.nan_to_num(LD) * mask.unsqueeze(-1)
 
+        vad_prob = torch.ones(x.size(0), device=x.device)
         if self.vad:
-            z = x.permute(0, 2, 1)  # (B, embedding, time)
-            z = self.vad_layer(z)  # (B, 1)
+            vad_prob = x.permute(0, 2, 1)  # (B, embedding, time)
+            vad_prob = self.vad_layer(vad_prob)  # (B, 1)
 
-        return x, LD, mask, z
+        return x, LD, mask, vad_prob
 
 
 class TextEncoder(Encoder):

@@ -10,6 +10,5 @@ python train.py \
         --audio_input both \
         --text_input g2p_embed \
         --stack_extractor \
-        --vad \
-        --output_dir ./results/vad \
+        --output_dir ./results/maxlen_t_30 \
         --comment 'user comments for each experiment'

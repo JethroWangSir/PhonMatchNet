@@ -2,7 +2,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-python train_ga.py \
+python train.py \
         --epoch 30 \
         --lr 1e-3 \
         --batch_size 512 \
